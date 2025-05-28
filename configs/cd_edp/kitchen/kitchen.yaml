@@ -1,0 +1,66 @@
+defaults:
+  - _self_
+  - task: kitchen-mixed-v0
+
+pipeline_name: cd_edp_d4rl_kitchen
+log_dir: logs
+device: cuda:0
+mode: train
+seed: 0
+
+# Environment
+discount: 0.99
+
+# Actor
+solver: ode_dpmsolver++_2M
+diffusion_steps: 50
+sampling_steps: 15
+ema_rate: 0.995
+actor_learning_rate: 0.0003
+
+# Critic
+hidden_dim: 256
+critic_learning_rate: 0.0003
+
+# Contraction
+lambda_contr: 0.1
+loss_type: "all" # or "eigen_max" or "eigen_avg" or "all"
+
+loss_weights:
+  jacobian: 0.0
+  eigen_max: 0.0
+  eigen_avg: 0.0
+
+num_power_iters: 5
+
+# Wandb
+wandb_mode: online
+project: contractive_diffuser
+group: ${task.env_name}
+exp_name: cd_edp
+
+# Training
+gradient_steps: 1000000
+batch_size: 256
+ema_update_interval: 5
+log_interval: 200
+save_interval: 50000
+eval_interval: 10000
+
+# Inference
+ckpt: latest
+num_envs: 50
+num_episodes: 3
+num_candidates: 50
+temperature: 0.5
+use_ema: True
+
+# hydra
+hydra:
+  job:
+    chdir: false
+  run:
+    dir: ${log_dir}/${pipeline_name}/${task.env_name}/${seed}
+  output_subdir: null
+
+
