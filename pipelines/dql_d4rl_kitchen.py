@@ -1,17 +1,17 @@
 import os
 import pathlib
 import time
+import contextlib
 
 from copy import deepcopy
-from typing import List
 
-import d4rl  # noqa
+# suppress d4rl import warnings
+with open(os.devnull, 'w') as devnull, \
+    contextlib.redirect_stdout(devnull), \
+    contextlib.redirect_stderr(devnull):
+    import d4rl
+
 import gym
-import logging
-
-# Suppress logs from d4rl and gym
-logging.getLogger("d4rl").setLevel(logging.CRITICAL)
-logging.getLogger("gym").setLevel(logging.CRITICAL)
 
 import hydra
 import numpy as np

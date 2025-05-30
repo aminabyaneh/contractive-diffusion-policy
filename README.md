@@ -59,9 +59,34 @@ pip install "dm_control<=1.0.20" "mujoco<=3.1.6"
 
 ---
 
+## Setup Guide Apptainer
+
+
 ## Training Pipelines
 
-Instructions and scripts for training are provided in the [pipelines](pipelines) directory.
+To run all experiments for all subtasks of a certain benchmark, use [all_exps.bash](all_exps.bash) in the following way.
+
+```bash
+chmod +x all_exps.bash
+./all_exps.bash <script> <seeds, default=1>
+
+# e.g., single run of all experiments using edp and kitchen env
+./all_exps.bash pipelines/cd_edp_kitchen.py
+```
+
+Choose from the following options for each entry of [all_exps.bash](all_exps.bash).
+
+```python
+scripts = ["Scripts in pipelines/ directory"]
+seeds = ["Number of random seeds, set to 1 for a single run"]
+```
+
+Detailed instructions and scripts are available in the [pipelines readme](pipelines/README.md) file.
+
+### Background processes
+
+The script launches background jobs for better parallelization.
+To kill these background processes, you can use ```pkill``` or just ```kill```. For instance ```pkill -9 -f kitchen``` for kitchen training processes or ```kill -9 <pid>``` if you have a specific process Id. Check list of processes with ```ps -aux | grep kitchen```.
 
 ---
 

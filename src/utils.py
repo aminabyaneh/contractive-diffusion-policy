@@ -9,6 +9,7 @@ and evaluation.
 
 import random
 import os
+import uuid
 import json
 import wandb
 import wandb.sdk.data_types.video as wv
@@ -65,8 +66,7 @@ class Logger:
         self._cfg = cfg
 
         # date and time based uuid
-        now = datetime.now()
-        self._uuid = f"{now.day:02d}{now.hour:02d}{now.minute:02d}"
+        self._uuid = f"{uuid.uuid4()}"
 
         # initialize wandb
         wandb.init(
