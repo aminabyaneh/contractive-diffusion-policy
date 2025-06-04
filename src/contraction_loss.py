@@ -27,7 +27,7 @@ def compute_jacobian(model: BaseNNDiffusion, xt: torch.Tensor, t: torch.Tensor, 
         torch.Tensor: The Jacobian of the model output with respect to the input xt.
     """
     xt = xt.clone().detach().requires_grad_(True)
-    output = model(xt, t, condition)
+    output = model(xt, t, condition) # TODO: replace with sample()?
     batch_size, dim = xt.shape
     jacobian = torch.zeros(batch_size, dim, dim, device=xt.device)
 

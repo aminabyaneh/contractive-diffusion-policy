@@ -45,22 +45,22 @@ fi
 for ((i=0; i<seeds; i++)); do
   for task in "${tasks[@]}"; do
     echo "Running plain run for seed $i on $environment:$task"
-    python "$script" env_name="$environment" task="$task" loss_type="all" exp_name="plain_run_${i}_${task}" seed="$i" &
+    python "$script" env_name="$environment" task="$task" loss_type="all" exp_name="plain_run_${i}_${task}" seed="$i" eval_interval=500 > "logs/plain_run_${i}_${task}.log" 2>&1 &
   done
-  wait
 done
 
 #===============================#
 #         Jacobian Runs         #
 #===============================#
-# jacobian_weights=(200 100 50)
+# jacobian_weights=(50 200)
 
 # for ((i=0; i<seeds; i++)); do
 #   for task in "${tasks[@]}"; do
 #     for weight in "${jacobian_weights[@]}"; do
-#       python "$script" env_name="$environment" task="$task" loss_type="all" loss_weights.jacobian="$weight" exp_name="jacobian_run_${i}_${weight}" seed="$i" &
+#       python "$script" env_name="$environment" task="$task" loss_type="all" loss_weights.jacobian="$weight" exp_name="jacobian_run_${i}_${weight}_${task}" seed="$i" &
 #     done
 #   done
+#   wait
 # done
 
 #===============================#

@@ -1,0 +1,16 @@
+# logs
+logs
+wandb
+
+# libs
+libs
+
+# python
+**pycache**
+
+# git
+# .gitignore
+
+# docker
+docker
+

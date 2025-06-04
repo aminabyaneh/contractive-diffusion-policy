@@ -3,11 +3,11 @@ defaults:
   - task: kitchen-mixed-v0
 
 # General
-pipeline_name: cd_edp_d4rl_${env_name}
+pipeline_name: cd_dql_d4rl_${env_name}
 device: cuda:0
 
 # Method
-method: edp
+method: dql
 mode: train
 seed: 0
 
@@ -23,13 +23,8 @@ max_episode_steps_per_env:
   antmaze: 1000
 
 # Actor
-solver: ${solvers.${env_name}}
-solvers:
-  kitchen: ode_dpmsolver++_2M
-  mujoco: ode_dpmsolver++_2M
-  antmaze: ddim
-
-predict_noise: False
+solver: ddim
+predict_noise: True
 diffusion_steps: 50
 sampling_steps: 15
 ema_rate: 0.995
@@ -53,8 +48,8 @@ num_power_iters: 5
 # Wandb
 wandb_mode: online
 project: contractive_diffuser
-group: ${method}_${env_name}
-exp_name: cd_edp
+group: ${task.${env_name}}
+exp_name: cd_dql
 log_dir: logs
 
 # Training

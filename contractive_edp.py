@@ -36,7 +36,7 @@ from src.sim_eval import eval
 from src.utils import Logger, set_seed
 
 
-@hydra.main(config_path=f"configs/edp", config_name=f"main", version_base=None)
+@hydra.main(config_path="configs/edp", config_name="main", version_base=None)
 def pipeline(args):
     """
     Main pipeline for training and evaluating contractive EDP on D4RL datasets.
@@ -61,7 +61,7 @@ def pipeline(args):
     # ---------------------- Create Dataset ----------------------
     env = gym.make(args.task.env_name)
 
-    # select the dataset handler
+    # dataset handler
     if args.env_name == "antmaze":
         dataset = D4RLAntmazeTDDataset(d4rl.qlearning_dataset(env))
     elif args.env_name == "kitchen":
@@ -84,7 +84,7 @@ def pipeline(args):
 
     # --------------- Network Architecture -----------------
     nn_diffusion = DQLMlp(obs_dim, act_dim, emb_dim=64, timestep_emb_type="positional").to(args.device)
-    nn_condition = IdentityCondition(dropout=0.0).to(args.device)
+    nn_condition = IdentityCondition(dropout=0.0).to(args.device) # TODO: Try other condition networks
 
     print(f"================================ Diffusion Model ==================================")
     report_parameters(nn_diffusion)
@@ -124,7 +124,7 @@ def pipeline(args):
         prior = torch.zeros((args.batch_size, act_dim), device=args.device)
 
         for batch in loop_dataloader(dataloader):
-            # get batch data
+            # load batch of data
             obs, next_obs = batch["obs"]["state"].to(args.device), batch["next_obs"]["state"].to(args.device)
             act = batch["act"].to(args.device)
             rew = batch["rew"].to(args.device)
