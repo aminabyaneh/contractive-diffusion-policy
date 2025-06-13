@@ -4,6 +4,8 @@ Evaluation script for the contractive diffusion models in simulation.
 The modules in this script evaluate a trained actor and critic in a mujoco reinforcement learning environment.
 """
 
+import os
+import contextlib
 import torch
 import gym
 import numpy as np
@@ -33,25 +35,16 @@ def eval(env, actor, critic, critic_target, dataset, args, obs_dim, act_dim):
                 "std_rew": float    # std of the rewards
             }
     """
-
     actor.eval()
     critic.eval()
     critic_target.eval()
 
-    # helper for creating a single env instance
-    def make_env():
-        def _thunk():
-            return gym.make(args.task.env_name)
-        return _thunk
-
     # suppress stdout/stderr during env setup
-    # with open(os.devnull, 'w') as devnull, \
-    #      contextlib.redirect_stdout(devnull), \
-    #      contextlib.redirect_stderr(devnull):
-
-    print("Creating environment...")
-    env_eval = SyncVectorEnv([make_env() for _ in range(args.num_envs)])
-    print("Environment created.")
+    with open(os.devnull, 'w') as devnull, \
+         contextlib.redirect_stdout(devnull), \
+         contextlib.redirect_stderr(devnull):
+        # vectorized gym environment (Running in parallel demands high RAM usage)
+        env_eval = gym.vector.make(args.task.env_name, num_envs=args.num_envs)
 
     normalizer = dataset.get_normalizer()
     episode_rewards = []
@@ -101,8 +94,6 @@ def eval(env, actor, critic, critic_target, dataset, args, obs_dim, act_dim):
             ep_reward = np.clip(ep_reward, 0.0, 1.0)
 
         episode_rewards.append(ep_reward)
-
-    print("Evaluation completed. Normalizing rewards...")
 
     # normalize rewards
     episode_rewards = [list(map(lambda x: env.get_normalized_score(x), r)) for r in episode_rewards]

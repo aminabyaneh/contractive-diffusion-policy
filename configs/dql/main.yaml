@@ -25,8 +25,8 @@ max_episode_steps_per_env:
 # Actor
 solver: ddim
 predict_noise: True
-diffusion_steps: 50
-sampling_steps: 15
+diffusion_steps: 10
+sampling_steps: 5
 ema_rate: 0.995
 actor_learning_rate: 0.0003
 
@@ -48,7 +48,7 @@ num_power_iters: 5
 # Wandb
 wandb_mode: online
 project: contractive_diffuser
-group: ${task.${env_name}}
+group: ${method}_${env_name}
 exp_name: cd_dql
 log_dir: logs
 
@@ -62,8 +62,8 @@ eval_interval: 10000
 
 # Inference
 ckpt: latest
-num_envs: 50
-num_episodes: 3
+num_envs: 5
+num_episodes: 10
 num_candidates: 100
 temperature: 0.5
 use_ema: True
@@ -73,6 +73,6 @@ hydra:
   job:
     chdir: false
   run:
-    dir: ${log_dir}/${pipeline_name}/${task.env_name}/${seed}
+    dir: ${log_dir}/${pipeline_name}/${task.env_name}/hydra/${seed}
   output_subdir: null
 

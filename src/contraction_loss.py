@@ -113,7 +113,7 @@ def compute_contractive_loss(model: DiscreteDiffusionSDE, xt: torch.Tensor, t: t
             - "eigen_avg": The average eigenvalue.
             - "eigen_std": The standard deviation.
     """
-    if loss_type not in ["jacobian", "eigen_max", "eigen_avg", "all"]:
+    if loss_type not in ["jacobian", "eigen_max", "eigen_avg", "all", "none"]:
         raise ValueError(f"Unknown loss: {loss_type}. Supported types: "
                          f"'jacobian', 'eigen_max', 'eigen_avg', 'all', 'none'.")
 

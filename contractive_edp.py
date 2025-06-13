@@ -72,7 +72,9 @@ def pipeline(args):
         raise ValueError(f"Unknown environment: {args.env_name}")
 
     dataloader = DataLoader(dataset, batch_size=args.batch_size, shuffle=True,
-                            num_workers=4, pin_memory=True, drop_last=True)
+                            num_workers=4, pin_memory=True, drop_last=True,
+                            persistent_workers=True)
+
     obs_dim, act_dim = dataset.o_dim, dataset.a_dim
 
     print(f"\n================================ Dataset report ==================================")

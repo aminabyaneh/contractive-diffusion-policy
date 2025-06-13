@@ -58,7 +58,7 @@ exp_name: cd_edp
 log_dir: logs
 
 # Training
-gradient_steps: 100000
+gradient_steps: 250000
 batch_size: 256
 ema_update_interval: 5
 log_interval: 200
@@ -67,8 +67,8 @@ eval_interval: 10000
 
 # Inference
 ckpt: latest
-num_envs: 50
-num_episodes: 3
+num_envs: 5
+num_episodes: 10
 num_candidates: 100
 temperature: 0.5
 use_ema: True

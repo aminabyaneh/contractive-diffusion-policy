@@ -72,7 +72,9 @@ def pipeline(args):
         raise ValueError(f"Unknown environment: {args.env_name}")
 
     dataloader = DataLoader(dataset, batch_size=args.batch_size, shuffle=True,
-                            num_workers=4, pin_memory=True, drop_last=True)
+                            num_workers=4, pin_memory=True, drop_last=True,
+                            persistent_workers=True)
+
     obs_dim, act_dim = dataset.o_dim, dataset.a_dim
 
     print(f"\n================================ Dataset report ==================================")
@@ -157,6 +159,15 @@ def pipeline(args):
                                        sample_steps=args.sampling_steps, use_ema=False, temperature=1.0,
                                        condition_cfg=obs, w_cfg=1.0, requires_grad=True)
 
+            # EDP action approximation (Just used for contractive loss)
+            t = torch.randint(args.diffusion_steps, (args.batch_size,), device=args.device)
+            eps = torch.randn_like(act)
+
+            alpha, sigma = at_least_ndim(actor.alpha[t], act.dim()), at_least_ndim(actor.sigma[t], act.dim())
+            noisy_act = alpha * act + sigma * eps
+
+            condition_vec_cfg = actor.model["condition"](obs, None)
+
             with FreezeModules([critic, ]):
                 q1_new_action, q2_new_action = critic(obs, pred_act)
             if np.random.uniform() > 0.5:
@@ -166,7 +177,7 @@ def pipeline(args):
 
             # ---------------------- Contraction Loss ----------------------
             loss_dict = compute_contractive_loss(model=actor.model["diffusion"],
-                                                 xt=pred_act, t=t,
+                                                 xt=noisy_act, t=t,
                                                  condition=condition_vec_cfg,
                                                  lambda_contr=args.lambda_contr,
                                                  loss_type=args.loss_type,

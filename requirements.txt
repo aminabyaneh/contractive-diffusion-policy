@@ -13,7 +13,7 @@ wandb
 dill
 av
 pygame
-pymunk
+pymunk<=6.0.0
 shapely<2.0.0
 scikit-image<0.23.0
 opencv-python
