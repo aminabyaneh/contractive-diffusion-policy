@@ -26,7 +26,7 @@ from cleandiffuser.dataset.d4rl_antmaze_dataset import D4RLAntmazeTDDataset
 from cleandiffuser.dataset.d4rl_mujoco_dataset import D4RLMuJoCoTDDataset
 
 from cleandiffuser.dataset.dataset_utils import loop_dataloader
-from cleandiffuser.diffusion import DiscreteDiffusionSDE
+from cleandiffuser.diffusion import DiscreteDiffusionSDE, ContinuousDiffusionSDE
 from cleandiffuser.nn_condition import IdentityCondition
 from cleandiffuser.nn_diffusion import DQLMlp
 from cleandiffuser.utils import report_parameters, DQLCritic, FreezeModules, at_least_ndim
@@ -93,13 +93,25 @@ def pipeline(args):
     print(f"===================================================================================\n")
 
     # ----------------- Diffusion Actor -------------------
-    actor = DiscreteDiffusionSDE(
-        nn_diffusion, nn_condition, predict_noise=args.predict_noise,
-        optim_params={"lr": args.actor_learning_rate},
-        x_max=+1. * torch.ones((1, act_dim), device=args.device),
-        x_min=-1. * torch.ones((1, act_dim), device=args.device),
-        diffusion_steps=args.diffusion_steps, ema_rate=args.ema_rate,
-        device=args.device)
+    if args.diffusion_type == "continuous":
+        actor = ContinuousDiffusionSDE(
+            nn_diffusion, nn_condition, predict_noise=args.predict_noise,
+            optim_params={"lr": args.actor_learning_rate},
+            x_max=+1. * torch.ones((1, act_dim), device=args.device),
+            x_min=-1. * torch.ones((1, act_dim), device=args.device),
+            device=args.device)
+
+    elif args.diffusion_type == "discrete":
+        actor = DiscreteDiffusionSDE(
+            nn_diffusion, nn_condition, predict_noise=args.predict_noise,
+            optim_params={"lr": args.actor_learning_rate},
+            x_max=+1. * torch.ones((1, act_dim), device=args.device),
+            x_min=-1. * torch.ones((1, act_dim), device=args.device),
+            diffusion_steps=args.diffusion_steps,
+            device=args.device)
+    else:
+        raise ValueError(f"Unknown diffusion type: {args.diffusion_type}")
+
 
     # ---------------------- Critic ------------------------
     critic = DQLCritic(obs_dim, act_dim, hidden_dim=args.hidden_dim).to(args.device)
@@ -188,16 +200,27 @@ def pipeline(args):
                 q_loss = - q2_new_action.mean() / q1_new_action.abs().mean().detach()
 
             # ---------------------- Contraction Loss ----------------------
-            loss_dict = compute_contractive_loss(model=actor.model["diffusion"],
-                                                 xt=noisy_act, t=t,
-                                                 condition=condition_vec_cfg,
-                                                 lambda_contr=args.lambda_contr,
-                                                 loss_type=args.loss_type,
-                                                 num_power_iters=args.num_power_iters)
+            t_threshold = int(args.diffusion_steps * args.contraction_threshold)  # e.g., 10% of total steps
+            low_t_mask = t < t_threshold
 
-            contraction_loss = float(args.loss_weights.jacobian) * loss_dict["jacobian_loss"] + \
-                               float(args.loss_weights.eigen_max) * loss_dict["eigen_max"] + \
-                               float(args.loss_weights.eigen_avg) * loss_dict["eigen_avg"]
+            if low_t_mask.any():
+                loss_dict = compute_contractive_loss(
+                    model=actor.model["diffusion"],
+                    xt=noisy_act[low_t_mask],
+                    t=t[low_t_mask],
+                    condition=condition_vec_cfg[low_t_mask],
+                    lambda_contr=args.lambda_contr,
+                    loss_type=args.loss_type,
+                    num_power_iters=args.num_power_iters
+                )
+
+                contraction_loss = (
+                    float(args.loss_weights.jacobian) * loss_dict["jacobian_loss"] +
+                    float(args.loss_weights.eigen_max) * loss_dict["eigen_max"] +
+                    float(args.loss_weights.eigen_avg) * loss_dict["eigen_avg"]
+                )
+            else:
+                contraction_loss = torch.tensor(0.0, device=act.device)
 
             # compute the total actor loss
             actor_loss = bc_loss + args.task.eta * q_loss + contraction_loss

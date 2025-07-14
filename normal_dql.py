@@ -32,8 +32,139 @@ from cleandiffuser.nn_diffusion import DQLMlp
 from cleandiffuser.utils import report_parameters, DQLCritic, FreezeModules, at_least_ndim
 
 from src.contraction_loss import compute_contractive_loss
-from src.sim_eval import eval
 from src.utils import Logger, set_seed
+
+
+def eval(env, actor, critic, critic_target, dataset, args, obs_dim, act_dim):
+    """
+    Synchronous inference using a trained actor and critic.
+    Avoids BrokenPipeError in parallel runs on a GPU server using SyncVectorEnv (no multiprocessing).
+
+    Args:
+        env (gym.Env): The environment to evaluate the model on.
+        actor (DiscreteDiffusionSDE): The diffusion model.
+        critic (DQLCritic): The critic model.
+        critic_target (DQLCritic): The target critic model.
+        dataset (D4RLKitchenTDDataset): The dataset used for training.
+        args (Namespace): The arguments used for training.
+        obs_dim (int): The dimension of the observation space.
+        act_dim (int): The dimension of the action space.
+
+    Returns:
+        dict: A dictionary containing the mean and std of the rewards.
+            {
+                "mean_rew": float,  # mean of the rewards
+                "std_rew": float    # std of the rewards
+            }
+    """
+    actor.eval()
+    critic.eval()
+    critic_target.eval()
+
+    # suppress stdout/stderr during env setup
+    with open(os.devnull, 'w') as devnull, \
+         contextlib.redirect_stdout(devnull), \
+         contextlib.redirect_stderr(devnull):
+        # vectorized gym environment (Running in parallel demands high RAM usage)
+        env_eval = gym.vector.make(args.task.env_name, num_envs=args.num_envs)
+
+    normalizer = dataset.get_normalizer()
+    episode_rewards = []
+
+    for _ in range(args.num_episodes):
+        obs, ep_reward, cum_done, t = env_eval.reset(), 0., 0., 0
+
+        while not np.all(cum_done) and t < args.max_episode_steps + 1:
+            # normalize obs
+            obs_tensor = torch.tensor(normalizer.normalize(obs), device=args.device, dtype=torch.float32)
+            obs_tensor = obs_tensor.unsqueeze(1).repeat(1, args.num_candidates, 1).view(-1, obs_dim)
+
+            # sample actions
+            act = actor(obs_tensor)
+
+            # resample
+            with torch.no_grad():
+                q = critic_target.q_min(obs_tensor, act)
+                q = q.view(-1, args.num_candidates, 1)
+                w = torch.softmax(q * args.task.weight_temperature, dim=1)
+                act = act.view(-1, args.num_candidates, act_dim)
+
+                indices = torch.multinomial(w.squeeze(-1), 1).squeeze(-1)
+                sampled_act = act[torch.arange(act.shape[0]), indices].cpu().numpy()
+
+            # step
+            obs, rew, done, _ = env_eval.step(sampled_act)
+
+            t += 1
+            ep_reward += (rew * (1 - cum_done)) if t < args.max_episode_steps else rew
+            cum_done = done if cum_done is None else np.logical_or(cum_done, done)
+
+        if args.env_name == "kitchen":
+            ep_reward = np.clip(ep_reward, 0.0, 4.0)
+        elif args.env_name == "antmaze":
+            ep_reward = np.clip(ep_reward, 0.0, 1.0)
+
+        episode_rewards.append(ep_reward)
+
+    # normalize rewards
+    episode_rewards = [list(map(lambda x: env.get_normalized_score(x), r)) for r in episode_rewards]
+    episode_rewards = np.array(episode_rewards)
+
+    # back to train mode
+    actor.train()
+    critic.train()
+    critic_target.train()
+
+    return {
+        "mean_rew": np.mean(np.mean(episode_rewards, -1), -1),
+        "std_rew": np.mean(np.std(episode_rewards, -1), -1)
+    }
+
+
+class DeterministicActor(nn.Module):
+    def __init__(self, obs_dim, act_dim, hidden_dim=512):
+        super().__init__()
+        self.net = nn.Sequential(
+            nn.Linear(obs_dim, hidden_dim),
+            nn.ReLU(),
+            nn.Linear(hidden_dim, hidden_dim),
+            nn.ReLU(),
+            nn.Linear(hidden_dim, act_dim),
+            nn.Tanh(),  # assuming actions in [-1,1]
+        )
+
+    def forward(self, obs):
+        return self.net(obs)
+
+
+class GaussianActor(nn.Module):
+    def __init__(self, obs_dim, act_dim, hidden_dim=512, log_std_min=-20, log_std_max=2):
+        super().__init__()
+        self.net = nn.Sequential(
+            nn.Linear(obs_dim, hidden_dim),
+            nn.ReLU(),
+            nn.Linear(hidden_dim, hidden_dim),
+            nn.ReLU(),
+        )
+        self.mean_layer = nn.Linear(hidden_dim, act_dim)
+        self.log_std_layer = nn.Linear(hidden_dim, act_dim)
+        self.log_std_min = log_std_min
+        self.log_std_max = log_std_max
+
+    def forward(self, obs):
+        x = self.net(obs)
+        mean = torch.tanh(self.mean_layer(x))  # assuming actions in [-1,1]
+        log_std = self.log_std_layer(x)
+        log_std = torch.clamp(log_std, self.log_std_min, self.log_std_max)
+        std = torch.exp(log_std)
+        return mean, std
+
+    def sample(self, obs):
+        mean, std = self.forward(obs)
+        normal = torch.distributions.Normal(mean, std)
+        x_t = normal.rsample()  # reparameterization trick
+        action = torch.tanh(x_t)
+        return action, mean, std
 
 
 @hydra.main(config_path="configs/dql", config_name="main", version_base=None)
@@ -92,14 +223,9 @@ def pipeline(args):
     report_parameters(nn_diffusion)
     print(f"===================================================================================\n")
 
-    # ----------------- Diffusion Actor -------------------
-    actor = DiscreteDiffusionSDE(
-        nn_diffusion, nn_condition, predict_noise=args.predict_noise,
-        optim_params={"lr": args.actor_learning_rate},
-        x_max=+1. * torch.ones((1, act_dim), device=args.device),
-        x_min=-1. * torch.ones((1, act_dim), device=args.device),
-        diffusion_steps=args.diffusion_steps, ema_rate=args.ema_rate,
-        device=args.device)
+    # --------------- Deterministic Actor --------------------
+    actor = DeterministicActor(obs_dim, act_dim, hidden_dim=args.hidden_dim).to(args.device)
+    actor_optimizer = torch.optim.Adam(actor.parameters(), lr=args.actor_learning_rate)
 
     # ---------------------- Critic ------------------------
     critic = DQLCritic(obs_dim, act_dim, hidden_dim=args.hidden_dim).to(args.device)
@@ -112,7 +238,7 @@ def pipeline(args):
     if args.mode == "train":
         start_time = time.time()
 
-        actor_lr_scheduler = CosineAnnealingLR(actor.optimizer, T_max=args.gradient_steps)
+        actor_lr_scheduler = CosineAnnealingLR(actor_optimizer, T_max=args.gradient_steps)
         critic_lr_scheduler = CosineAnnealingLR(critic_optim, T_max=args.gradient_steps)
 
         actor.train()
@@ -120,10 +246,7 @@ def pipeline(args):
 
         n_gradient_step = 0
         log = {"step": 0, "time": 0, "bc_loss": 0., "q_loss": 0., "critic_loss": 0., "target_q_mean": 0.,
-               "target_q_std": 0., "eigen_max": 0., "eigen_avg": 0., "eigen_std": 0.,
-               "jacobian_loss": 0., "jacobian_norm": 0.}
-
-        prior = torch.zeros((args.batch_size, act_dim), device=args.device)
+               "target_q_std": 0.}
 
         for batch in loop_dataloader(dataloader):
             # load batch of data
@@ -135,9 +258,8 @@ def pipeline(args):
             # ---------------------- Critic Training ----------------------
             current_q1, current_q2 = critic(obs, act)
 
-            next_act, _ = actor.sample(prior, solver=args.solver, n_samples=args.batch_size,
-                                        sample_steps=args.sampling_steps, use_ema=True, temperature=1.0,
-                                        condition_cfg=next_obs, w_cfg=1.0, requires_grad=False)
+            # sample actions
+            next_act = actor(obs)
 
             with torch.no_grad():
                 target_q = torch.min(*critic_target(next_obs, next_act))
@@ -154,56 +276,31 @@ def pipeline(args):
             critic_optim.step()
 
             # ---------------------- Actor Training ----------------------
-            bc_loss = actor.loss(act, obs)
-            pred_act, _ = actor.sample(prior, solver=args.solver, n_samples=args.batch_size,
-                                       sample_steps=args.sampling_steps, use_ema=False, temperature=1.0,
-                                       condition_cfg=obs, w_cfg=1.0, requires_grad=True)
-
-            # EDP action approximation (Just used for contractive loss)
-            t = torch.randint(args.diffusion_steps, (args.batch_size,), device=args.device)
-            eps = torch.randn_like(act)
-
-            alpha, sigma = at_least_ndim(actor.alpha[t], act.dim()), at_least_ndim(actor.sigma[t], act.dim())
-            noisy_act = alpha * act + sigma * eps
-
-            condition_vec_cfg = actor.model["condition"](obs, None)
+            bc_loss = F.mse_loss(next_act, act)
 
             with FreezeModules([critic, ]):
-                q1_new_action, q2_new_action = critic(obs, pred_act)
+                q1_new_action, q2_new_action = critic(obs, next_act)
             if np.random.uniform() > 0.5:
                 q_loss = - q1_new_action.mean() / q2_new_action.abs().mean().detach()
             else:
                 q_loss = - q2_new_action.mean() / q1_new_action.abs().mean().detach()
 
-            # ---------------------- Contraction Loss ----------------------
-            loss_dict = compute_contractive_loss(model=actor.model["diffusion"],
-                                                 xt=noisy_act, t=t,
-                                                 condition=condition_vec_cfg,
-                                                 lambda_contr=args.lambda_contr,
-                                                 loss_type=args.loss_type,
-                                                 num_power_iters=args.num_power_iters)
-
-            contraction_loss = float(args.loss_weights.jacobian) * loss_dict["jacobian_loss"] + \
-                               float(args.loss_weights.eigen_max) * loss_dict["eigen_max"] + \
-                               float(args.loss_weights.eigen_avg) * loss_dict["eigen_avg"]
-
             # compute the total actor loss
-            actor_loss = bc_loss + args.task.eta * q_loss + contraction_loss
+            actor_loss = bc_loss + args.task.eta * q_loss
 
-            actor.optimizer.zero_grad()
+            actor_optimizer.zero_grad()
             actor_loss.backward()
-            actor.optimizer.step()
+            actor_optimizer.step()
 
             actor_lr_scheduler.step()
             critic_lr_scheduler.step()
 
             # EMA update
-            if n_gradient_step % args.ema_update_interval == 0:
-                if n_gradient_step >= 1000:
-                    actor.ema_update()
-                # Polyak‐average update for the ensemble critic targets
-                for param, target_param in zip(critic.parameters(), critic_target.parameters()):
-                    target_param.data.copy_(0.995 * param.data + (1 - 0.995) * target_param.data)
+            with torch.no_grad():
+                if n_gradient_step % args.ema_update_interval == 0:
+                    # Polyak‐average update for the ensemble critic targets
+                    for param, target_param in zip(critic.parameters(), critic_target.parameters()):
+                        target_param.data.copy_(0.995 * param.data + (1 - 0.995) * target_param.data)
 
             # ---------------------- Logging ----------------------
             log["bc_loss"] += bc_loss.item()
@@ -212,11 +309,6 @@ def pipeline(args):
             log["target_q_mean"] += target_q.mean().item()
             log["target_q_std"] += target_q.std().item()
 
-            log["eigen_max"] += loss_dict["eigen_max"].item()
-            log["eigen_avg"] += loss_dict["eigen_avg"].item()
-            log["eigen_std"] += loss_dict["eigen_std"].item()
-            log["jacobian_loss"] += loss_dict["jacobian_loss"].item()
-            log["jacobian_norm"] += loss_dict["jacobian_norm"].item()
 
             if (n_gradient_step + 1) % args.log_interval == 0:
                 log["bc_loss"] /= args.log_interval
@@ -225,18 +317,12 @@ def pipeline(args):
                 log["target_q_mean"] /= args.log_interval
                 log["time"] = (time.time() - start_time) / 60
                 log["step"] = n_gradient_step + 1
-                log["eigen_max"] /= args.log_interval
-                log["eigen_avg"] /= args.log_interval
-                log["eigen_std"] /= args.log_interval
-                log["jacobian_loss"] /= args.log_interval
-                log["jacobian_norm"] /= args.log_interval
                 log["target_q_std"] /= args.log_interval
 
                 # log to console and wandb
                 logger.log(log, category='train')
                 log = {"step": 0, "time": 0, "bc_loss": 0., "q_loss": 0., "critic_loss": 0.,
-                       "target_q_mean": 0., "target_q_std": 0., "eigen_max": 0., "eigen_avg": 0.,
-                       "eigen_std": 0., "jacobian_loss": 0., "jacobian_norm": 0.}
+                       "target_q_mean": 0., "target_q_std": 0.}
 
             # evaluation
             eval_time = time.time()
@@ -246,18 +332,25 @@ def pipeline(args):
                 eval_log["step"] = n_gradient_step + 1
                 logger.log(eval_log, category='eval')
 
-            # saving
+            # # saving
             if (n_gradient_step + 1) % args.save_interval == 0:
                 # save diffusion actor checkpoints
                 save_path = f"{save_path}/models/{args.exp_name}/"
                 os.makedirs(save_path, exist_ok=True)
 
-                actor.save(save_path + f"diffusion_ckpt_{n_gradient_step + 1}.pt")
-                actor.save(save_path + f"diffusion_ckpt_latest.pt")
+                torch.save({
+                    "actor": actor.state_dict(),
+                }, save_path + f"diffusion_ckpt_{n_gradient_step + 1}.pt")
+
+                torch.save({
+                    "actor": actor.state_dict(),
+                }, save_path + f"diffusion_ckpt_latest.pt")
+
                 torch.save({
                     "critic": critic.state_dict(),
                     "critic_target": critic_target.state_dict(),
                 }, save_path + f"critic_ckpt_{n_gradient_step + 1}.pt")
+
                 torch.save({
                     "critic": critic.state_dict(),
                     "critic_target": critic_target.state_dict(),

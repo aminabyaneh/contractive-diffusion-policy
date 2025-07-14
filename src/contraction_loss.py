@@ -27,7 +27,7 @@ def compute_jacobian(model: BaseNNDiffusion, xt: torch.Tensor, t: torch.Tensor, 
         torch.Tensor: The Jacobian of the model output with respect to the input xt.
     """
     xt = xt.clone().detach().requires_grad_(True)
-    output = model(xt, t, condition) # TODO: replace with sample()?
+    output = model(xt, t, condition)
     batch_size, dim = xt.shape
     jacobian = torch.zeros(batch_size, dim, dim, device=xt.device)
 
@@ -115,11 +115,12 @@ def compute_contractive_loss(model: DiscreteDiffusionSDE, xt: torch.Tensor, t: t
     """
     if loss_type not in ["jacobian", "eigen_max", "eigen_avg", "all", "none"]:
         raise ValueError(f"Unknown loss: {loss_type}. Supported types: "
-                         f"'jacobian', 'eigen_max', 'eigen_avg', 'all', 'none'.")
+                         f"'jacobian', 'eigen_max', 'eigen_avg', 'all', 'none', 'frobenius_approx'.")
 
     # compute symmetric Jacobian
-    J = compute_jacobian(model, xt, t, condition)
-    J_sym = 0.5 * (J + J.transpose(-2, -1))
+    if loss_type != "frobenius_approx":
+        J = compute_jacobian(model, xt, t, condition)
+        J_sym = 0.5 * (J + J.transpose(-2, -1))
 
     # initialize results
     results = {

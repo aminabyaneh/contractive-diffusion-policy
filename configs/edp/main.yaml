@@ -27,21 +27,23 @@ solver: ${solvers.${env_name}}
 solvers:
   kitchen: ode_dpmsolver++_2M
   mujoco: ode_dpmsolver++_2M
-  antmaze: ddim
+  antmaze: ode_dpmsolver++_2M
 
 predict_noise: False
 diffusion_steps: 50
 sampling_steps: 15
 ema_rate: 0.995
 actor_learning_rate: 0.0003
+diffusion_type: discrete # or continuous
 
 # Critic
 hidden_dim: 256
 critic_learning_rate: 0.0003
 
 # Contraction
+contraction_threshold: 0.1
 lambda_contr: 0.1
-loss_type: "all" # or "eigen_max" or "eigen_avg" or "all"
+loss_type: "jacobian" # or "eigen_max" or "eigen_avg" or "all"
 
 loss_weights:
   jacobian: 0.0
@@ -61,14 +63,14 @@ log_dir: logs
 gradient_steps: 250000
 batch_size: 256
 ema_update_interval: 5
-log_interval: 200
+log_interval: 1000
 save_interval: 50000
-eval_interval: 10000
+eval_interval: 20000
 
 # Inference
 ckpt: latest
-num_envs: 5
-num_episodes: 10
+num_envs: 10
+num_episodes: 5
 num_candidates: 100
 temperature: 0.5
 use_ema: True
