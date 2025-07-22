@@ -1,6 +1,7 @@
 import hydra
 import os
 import sys
+import pdb
 import warnings
 warnings.filterwarnings('ignore')
 
@@ -10,11 +11,12 @@ import time
 import numpy as np
 import torch
 import torch.nn as nn
+from torch.utils.data import random_split
 
-from cleandiffuser.env import pusht
+from cleandiffuser.env.robomimic.robomimic_lowdim_wrapper import RobomimicLowdimWrapper
 from cleandiffuser.env.wrapper import VideoRecordingWrapper, MultiStepWrapper
 from cleandiffuser.env.utils import VideoRecorder
-from cleandiffuser.dataset.pusht_dataset import PushTImageDataset
+from cleandiffuser.dataset.robomimic_dataset import RobomimicDataset
 from cleandiffuser.dataset.dataset_utils import loop_dataloader
 from cleandiffuser.utils import report_parameters
 
@@ -24,17 +26,51 @@ from src.contraction_diffusion import DiscreteDiffusionSDE as SDE
 
 def make_env(args, idx):
     def thunk():
-        env = gym.make(args.env_name)
-        video_recorder = VideoRecorder.create_h264(
-                            fps=10,
-                            codec='h264',
-                            input_pix_fmt='rgb24',
-                            crf=22,
-                            thread_type='FRAME',
-                            thread_count=1
-                        )
-        env = VideoRecordingWrapper(env, video_recorder, file_path=None, steps_per_render=1)
-        env = MultiStepWrapper(env, n_obs_steps=args.obs_steps, n_action_steps=args.action_steps, max_episode_steps=args.max_episode_steps)
+        import robomimic.utils.file_utils as FileUtils
+        import robomimic.utils.env_utils as EnvUtils
+        import robomimic.utils.obs_utils as ObsUtils
+
+        def create_robomimic_env(env_meta, obs_keys):
+            ObsUtils.initialize_obs_modality_mapping_from_dict(
+                {'low_dim': obs_keys})
+            env = EnvUtils.create_env_from_metadata(
+                env_meta=env_meta,
+                render=False,
+                # only way to not show collision geometry
+                # is to enable render_offscreen
+                # which uses a lot of RAM.
+                render_offscreen=False,
+                use_image_obs=False,
+            )
+            return env
+
+        dataset_path = os.path.expanduser(args.dataset_path)
+        env_meta = FileUtils.get_env_metadata_from_dataset(dataset_path)
+        abs_action = args.abs_action
+        if abs_action:
+            env_meta['env_kwargs']['controller_configs']['control_delta'] = False
+        env = create_robomimic_env(env_meta=env_meta, obs_keys=args.task.obs_keys)
+        env = RobomimicLowdimWrapper(
+                env=env,
+                obs_keys=args.task.obs_keys,
+                init_state=None,
+                render_hw=(256, 256),
+                render_camera_name='agentview'
+        )
+
+        if args.save_video:
+            video_recorder = VideoRecorder.create_h264(
+                                fps=10,
+                                codec='h264',
+                                input_pix_fmt='rgb24',
+                                crf=22,
+                                thread_type='FRAME',
+                                thread_count=1
+                            )
+            env = VideoRecordingWrapper(env, video_recorder, file_path=None, steps_per_render=2)
+
+        env = MultiStepWrapper(env, n_obs_steps=args.task.obs_steps, n_action_steps=args.task.action_steps, max_episode_steps=args.task.max_episode_steps)
+        env.seed(args.seed + idx)
         print("Env seed: ", args.seed + idx)
         return env
 
@@ -52,51 +88,49 @@ def inference(args, envs, dataset, agent, logger):
 
     for i in range(args.eval_episodes // args.num_envs):
         ep_reward = [0.0] * args.num_envs
-        step_reward = []
         obs, t = envs.reset(), 0
 
         # initialize video stream
         if args.save_video:
             logger.video_init(envs.envs[0], enable=True, video_id=str(i))  # save videos
 
-        while t < args.max_episode_steps:
-            if args.env_name == 'pusht-image-v0':
-                obs_dict = {}
-                for k in obs.keys():
-                    obs_seq = obs[k].astype(np.float32)  # (num_envs, obs_steps, obs_dim)
-                    nobs = dataset.normalizer['obs'][k].normalize(obs_seq)
-                    obs_dict[k] = nobs = torch.tensor(nobs, device=args.device, dtype=torch.float32)  # (num_envs, obs_steps, obs_dim)
+        while t < args.task.max_episode_steps:
+            obs_seq = obs.astype(np.float32)  # (num_envs, obs_steps, obs_dim)
+            # normalize obs
+            nobs = dataset.normalizer['obs']['state'].normalize(obs_seq)
+            nobs = torch.tensor(nobs, device=args.device, dtype=torch.float32)  # (num_envs, obs_steps, obs_dim)
             with torch.no_grad():
-                condition = obs_dict
                 if args.nn == "pearce_mlp":
+                    condition = nobs
                     # run sampling (num_envs, action_dim)
-                    prior = torch.zeros((args.num_envs, args.action_dim), device=args.device)
+                    prior = torch.zeros((args.num_envs, args.task.action_dim), device=args.device)
                 elif args.nn == 'dit':
-                    # run sampling (num_envs, args.action_steps, action_dim)
-                    prior = torch.zeros((args.num_envs, args.action_steps, args.action_dim), device=args.device)
+                    # reshape observation to (num_envs, obs_horizon*obs_dim)
+                    condition = nobs.flatten(start_dim=1)
+                    # run sampling (num_envs, args.task.action_steps, action_dim)
+                    prior = torch.zeros((args.num_envs, args.task.action_steps, args.task.action_dim), device=args.device)
                 else:
-                    ValueError("fatal nn")
+                    raise ValueError("NN type not supported")
 
                 if not args.diffusion_x:
-                    naction, _ = agent.sample(prior=prior, n_samples=args.num_envs, sample_steps=args.sample_steps,
-                                              solver=solver, condition_cfg=condition, w_cfg=1.0, use_ema=True)
+                    naction, _ = agent.sample(prior=prior, n_samples=args.num_envs, sample_steps=args.sample_steps, solver=solver,
+                                        condition_cfg=condition, w_cfg=1.0, use_ema=True)
                 else:
-                    naction, _ = agent.sample_x(prior=prior, n_samples=args.num_envs, sample_steps=args.sample_steps,
-                                                solver=solver, condition_cfg=condition, w_cfg=1.0, use_ema=True, extra_sample_steps=args.extra_sample_steps)
+                    naction, _ = agent.sample_x(prior=prior, n_samples=args.num_envs, sample_steps=args.sample_steps, solver=solver,
+                                        condition_cfg=condition, w_cfg=1.0, use_ema=True, extra_sample_steps=args.extra_sample_steps)
 
             # unnormalize prediction
             naction = naction.detach().to('cpu').clip(-1., 1.).numpy()  # (num_envs, action_dim)
             action_pred = dataset.normalizer['action'].unnormalize(naction)
-            action = action_pred.reshape(args.num_envs, 1, args.action_dim)  # (num_envs, 1, action_dim)
-            obs, reward, done, info = envs.step(action)
+            action = action_pred.reshape(args.num_envs, 1, args.task.action_dim)  # (num_envs, 1, action_dim)
 
+            if args.abs_action:
+                action = dataset.undo_transform_action(action)
+            obs, reward, _, _ = envs.step(action)
             ep_reward += reward
-            step_reward.append(reward)
-            t += args.action_steps
+            t += args.task.action_steps
 
-        ep_reward = np.around(np.array(ep_reward), 2)
-        success = np.around(np.max(np.array(step_reward), axis=0), 2)
-
+        success = [1.0 if s > 0 else 0.0 for s in ep_reward]
         episode_rewards.append(ep_reward)
         episode_steps.append(t)
         episode_success.append(success)
@@ -104,12 +138,12 @@ def inference(args, envs, dataset, agent, logger):
     return {'mean_step': np.nanmean(episode_steps), 'mean_reward': np.nanmean(episode_rewards), 'mean_success': np.nanmean(episode_success)}
 
 
-@hydra.main(config_path="configs/dbc/pusht/pearce_mlp", config_name="pusht_image")
+@hydra.main(config_path="configs/dbc/robomimic_lowdim", config_name="main")
 def pipeline(args):
     # --------------------- Create Path -----------------------
     set_seed(args.seed)
 
-    save_path = f'{args.log_dir}/{args.pipeline_name}/{args.env_name}/'
+    save_path = f'{args.log_dir}/{args.pipeline_name}/{args.task.env_name}/'
     if os.path.exists(save_path) is False:
         os.makedirs(save_path)
 
@@ -123,15 +157,25 @@ def pipeline(args):
 
     # ---------------- Create Dataset --------------------
     dataset_path = os.path.expanduser(args.dataset_path)
-    if args.env_name == 'pusht-image-v0':
-        dataset = PushTImageDataset(dataset_path, horizon=args.horizon, obs_keys=args.obs_keys,
-                                pad_before=args.obs_steps-1, pad_after=args.action_steps-1, abs_action=args.abs_action)
-    else:
-        raise ValueError(f"Unsupported environment: {args.env_name}. Please check the configuration.")
+    dataset = RobomimicDataset(dataset_path, horizon=args.horizon, obs_keys=args.task.obs_keys,
+                               pad_before=args.task.obs_steps-1, pad_after=args.task.action_steps-1, abs_action=args.abs_action)
 
-    print(dataset)
-    dataloader = torch.utils.data.DataLoader(
+    # compute sizes
+    available_data_rate = args.available_data_rate
+    total_len = len(dataset)
+    subset_len = int(total_len * available_data_rate)
+    other_len  = total_len - subset_len
+
+    # randomly split into “half” and “the rest”
+    limited_dataset, _ = random_split(
         dataset,
+        [subset_len, other_len],
+        generator=torch.Generator().manual_seed(42)  # for reproducibility
+    )
+
+
+    dataloader = torch.utils.data.DataLoader(
+        limited_dataset,
         batch_size=args.batch_size,
         num_workers=4,
         shuffle=True,
@@ -143,31 +187,28 @@ def pipeline(args):
 
     # --------------- Create Diffusion Model -----------------
     if args.nn == "pearce_mlp":
-        from cleandiffuser.nn_condition import MultiImageObsCondition
+        from cleandiffuser.nn_condition import PearceObsCondition
         from cleandiffuser.nn_diffusion import PearceMlp
 
-        nn_diffusion = PearceMlp(act_dim=args.action_dim, To=args.obs_steps, emb_dim=256, hidden_dim=512).to(args.device)
-        nn_condition = MultiImageObsCondition(
-            shape_meta=args.shape_meta, emb_dim=256, rgb_model_name=args.rgb_model, resize_shape=args.resize_shape,
-            crop_shape=args.crop_shape, random_crop=args.random_crop,
-            use_group_norm=args.use_group_norm, use_seq=args.use_seq).to(args.device)
+        nn_diffusion = PearceMlp(act_dim=args.task.action_dim, To=args.task.obs_steps, emb_dim=128,
+                                 hidden_dim=512).to(args.device)
+        nn_condition = PearceObsCondition(obs_dim=args.task.obs_dim, dropout=0.0).to(args.device)
 
     elif args.nn == "dit":
-        from cleandiffuser.nn_condition import MultiImageObsCondition
+        from cleandiffuser.nn_condition import MLPCondition
         from cleandiffuser.nn_diffusion import DiT1d
 
-        nn_condition = MultiImageObsCondition(
-            shape_meta=args.shape_meta, emb_dim=256, rgb_model_name=args.rgb_model, resize_shape=args.resize_shape,
-            crop_shape=args.crop_shape, random_crop=args.random_crop,
-            use_group_norm=args.use_group_norm, use_seq=args.use_seq).to(args.device)
-        nn_diffusion = DiT1d(
-            args.action_dim, emb_dim=256*args.obs_steps, d_model=320, n_heads=10, depth=2, timestep_emb_type="fourier").to(args.device)
+        nn_diffusion = DiT1d(args.task.action_dim, emb_dim=256, d_model=384, n_heads=12,
+                             depth=6, timestep_emb_type="fourier").to(args.device)
+        nn_condition = MLPCondition(in_dim=args.task.obs_steps * args.task.obs_dim,
+                                    out_dim=256, hidden_dims=[256, ], act=nn.ReLU(),
+                                    dropout=0.25).to(args.device)
     else:
         raise ValueError(f"Invalid nn type {args.nn}")
 
     print(f"======================= Parameter Report of Diffusion Model =======================")
     report_parameters(nn_diffusion)
-    print(f"==============================================================================")
+    print(f"===================================================================================")
 
     # ----------------- Diffusion Agent ----------------------
     args.diffusion_x = False  # SDE does not support diffusion_x
@@ -191,20 +232,18 @@ def pipeline(args):
 
         start_time = time.time()
         for batch in loop_dataloader(dataloader):
-            # get condition
-            # diffusionBC
-            # |o|o|
-            # | |a|
-            nobs = batch['obs']
-            condition = {}
-            for k in nobs.keys():
-                condition[k] = nobs[k][:, :args.obs_steps, :].to(args.device)
 
+            # preprocess
+            nobs = batch['obs']['state'].to(args.device)
             naction = batch['action'].to(args.device)
-            if args.nn == "pearce_mlp":
+
+            # diffusionBC
+            condition = nobs[:, :args.task.obs_steps, :]  # (B, obs_horizon, obs_dim)
+            if args.nn == "pearce_mlp" or args.nn == "pearce_transformer":
                 naction = naction[:, -1, :]  # (B, action_dim)
             elif args.nn == 'dit':
-                naction = naction[:, -args.action_steps:, :]  # (B, action_steps, action_dim)
+                condition = condition.flatten(start_dim=1)  # (B, obs_horizon*obs_dim)
+                naction = naction[:, -args.task.action_steps:, :]  # (B, action_steps, action_dim)
             else:
                 ValueError("fatal nn")
 
@@ -260,7 +299,7 @@ def pipeline(args):
         agent.model.eval()
         agent.model_ema.eval()
 
-        metrics = {'step': 0}
+        metrics = {'step': args.gradient_steps}
         metrics.update(inference(args, envs, dataset, agent, logger))
         logger.log(metrics, category='inference')
 
@@ -270,14 +309,3 @@ def pipeline(args):
 
 if __name__ == "__main__":
     pipeline()
-
-
-
-
-
-
-
-
-
-
-

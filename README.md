@@ -56,10 +56,20 @@ If you get errors related to Mujoco, you can downgrade the version to 3.1.6 as s
 ```bash
 pip install "dm_control<=1.0.20" "mujoco<=3.1.6"
 ```
-
 ---
 
-## Setup Guide Apptainer
+### 4. Install Robomimic
+
+Note: There exists an incompatiblity between MuJoCu for Robosuite and D4RL. Easiest fix for now is by cloning the previous conda environment or downgrading the dm_control package.
+
+We prefer the first way as it's simpler and costs only a bit of disk space.
+
+```bash
+conda create --name contractive-diffuser-robomimic --clone contractive-diffuser
+```
+
+And now install Robomimic:
+
 
 
 ## Training Pipelines

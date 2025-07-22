@@ -4,34 +4,37 @@
 # usage: ./all_exps.bash <script> <seeds>
 
 set -euo pipefail
-seeds=4
 
-# gradient_steps=350000
-# env=pusht
+# params
+environment="${1:-"robomimic_lowdim"}"
+seeds="${2:-5}"
 
-jacobian=(100)
+# main script logic goes here
+echo "Starting script with argument: $environment, $seeds"
 
-gradient_steps=600000
-env=pusht_image
+tasks=("square" "transport") # "can" "square" "transport"
+jacobian_penalty=(0.0 0.1 1.0 10.0)
+available_data_rate=(1.0 0.5 0.1 0.05)
+gradient_steps=100000
+eval_freq=10000
+project="cdp_insufficient_data"
 
-# condition based on environment
-if [ "$env" == "pusht" ]; then
-  for j in {0..3}; do
-    for ((i=0; i<seeds; i++)); do
-      echo "Running plain run for seed $i on pusht with jacobian ${jacobian[j]}"
-      python contractive_dbc_pusht.py  gradient_steps=$gradient_steps seed=$i loss_weights.jacobian=${jacobian[j]} lambda_contr=0.001 > logs/output/plain_run_${i}_${jacobian[j]}_pusht.log 2>&1 &
+for jp in "${jacobian_penalty[@]}"; do
+  for task in "${tasks[@]}"; do
+    for adr in "${available_data_rate[@]}"; do
+      for i in $(shuf -i 0-9999 -n $seeds); do
+        echo "Running $task seed $i with penalty $jp and available data rate $adr"
+
+        if [[ "$environment" == "robomimic_lowdim" ]]; then
+          python dbc_robomimic.py task="$task" loss_type="jacobian" exp_name="jrun_${i}_${task}_${jp}_${adr}" seed="$i" project="$project" gradient_steps="$gradient_steps" eval_freq="$eval_freq" loss_weights.jacobian="$jp" available_data_rate="$adr" > "logs/jrun_${i}_${task}_${jp}_${adr}.log" 2>&1 &
+        elif [[ "$environment" == "robomimic_highdim" ]]; then
+          python dbc_robomimic_image.py task="$task" loss_type="jacobian" exp_name="jrun_${i}_${task}_${jp}_${adr}" seed="$i" project="$project" gradient_steps="$gradient_steps" eval_freq="$eval_freq" loss_weights.jacobian="$jp" available_data_rate="$adr" > "logs/jrun_${i}_${task}_${jp}_${adr}.log" 2>&1 &
+        fi
+
+      done
+      wait
     done
-    wait
   done
-elif [ "$env" == "pusht_image" ]; then
-  echo "Running plain run for pusht_image"
-  for j in {0..3}; do
-    for ((i=0; i<seeds; i++)); do
-      echo "Running plain run for seed $i on pusht_image with jacobian ${jacobian[j]}"
-      python contractive_dbc_pusht_image.py gradient_steps=$gradient_steps seed=$i loss_weights.jacobian=${jacobian[j]} > logs/output/plainimage_run_${i}_${jacobian[j]}_pusht_image.log 2>&1 &
-    done
-    wait
-  done
-fi
+done
 
 echo "Script finished."

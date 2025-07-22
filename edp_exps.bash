@@ -47,12 +47,12 @@ fi
 #==============================#
 #          Jacobian Runs       #
 #==============================#
-jacobian_penalty=(0.001 0.01 0.1)
+jacobian_penalty=(0.0)
 for jp in "${jacobian_penalty[@]}"; do
   for task in "${tasks[@]}"; do
     for i in $(shuf -i 0-9999 -n $seeds); do
       echo "Running $task seed $i with penalty $jp"
-      python contractive_edp.py env_name="$env" task="$task" loss_type="jacobian" exp_name="jrun_${i}_${task}_${jp}" seed="$i" project="contractive_diffuser" gradient_steps=500000 eval_interval=50000 loss_weights.jacobian="$jp" > "logs/jrun_${i}_${task}_${jp}.log" 2>&1 &
+      python contractive_edp.py env_name="$env" task="$task" loss_type="jacobian" exp_name="jrun_${i}_${task}_${jp}" seed="$i" project="contractive_diffuser" gradient_steps=200000 eval_interval=20000 loss_weights.jacobian="$jp" > "logs/jrun_${i}_${task}_${jp}.log" 2>&1 &
     done
     wait
   done

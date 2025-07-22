@@ -1,0 +1,73 @@
+pipeline_name: dbc_pusht
+
+# env
+env_name: pusht-v0
+abs_action: false
+dataset_path: libs/PushT/pusht_cchi_v7_replay.zarr
+mode: train
+max_episode_steps: 300
+obs_keys: ["state", "action", "keypoint"]
+obs_dim: 5
+action_dim: 2
+obs_steps: 2
+action_steps: 1
+
+# train
+device: cuda:0
+seed: 0
+gradient_steps: 220000
+batch_size: 512
+horizon: 2
+nn: pearce_mlp # or "dit"
+
+diffusion: sde
+solver: ${solvers.${diffusion}}
+solvers:
+  ddpm: null
+  edm: euler
+  sde: ode_dpmsolver++_2M
+  csde: ode_dpmsolver++_2M
+
+sample_steps: 50
+diffusion_x: true
+extra_sample_steps: 8
+
+# contractivity
+lambda_contr: 0.1
+loss_type: "jacobian" # or "eigen_max" or "eigen_avg" or "all"
+
+loss_weights:
+  jacobian: 0.0
+  eigen_max: 0.0
+  eigen_avg: 0.0
+
+# optimizer
+lr: ${lrs.${nn}}
+lrs:
+  dit: 5e-4
+  pearce_mlp: 1e-3
+
+# eval
+model_path: path/to/model
+eval_episodes: 10
+num_envs: 5
+eval_freq: 10000
+save_video: true
+
+# log
+exp_name: ${env_name}_${diffusion}
+save_path: logs
+project: contractive_diffuser
+group: dbc_pusht
+wandb_mode: online
+log_freq: 500
+save_freq: 100000
+log_dir: logs
+
+# hydra
+hydra:
+  job:
+    chdir: false
+  run:
+    dir: ${log_dir}/${pipeline_name}/${env_name}/hydra/${seed}
+  output_subdir: null

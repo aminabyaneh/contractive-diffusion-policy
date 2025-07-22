@@ -1,0 +1,11 @@
+env_name: transport
+max_episode_steps: 700
+obs_keys: [
+  'object',
+  'robot0_eef_pos', 'robot0_eef_quat', 'robot0_gripper_qpos',
+  'robot1_eef_pos', 'robot1_eef_quat', 'robot1_gripper_qpos'
+]
+obs_dim: 59 # 41+(3+4+2)*2
+action_dim: 14 # 7*2
+obs_steps: 2
+action_steps: 1

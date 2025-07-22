@@ -1,25 +1,25 @@
+defaults:
+  - _self_
+  - task: lift
 
-pipeline_name: dbc_pusht
+pipeline_name: dbc_robomimic_lowdim
 
 # env
-env_name: pusht-v0
+env_type: ph
+env_name: ${task.env_name}
 abs_action: false
-dataset_path: libs/PushT/pusht_cchi_v7_replay.zarr
+dataset_path: libs/robomimic/datasets/${env_name}/${env_type}/low_dim.hdf5
 mode: train
-max_episode_steps: 300
-obs_keys: ["state", "action", "keypoint"]
-obs_dim: 5
-action_dim: 2
-obs_steps: 2
-action_steps: 1
 
 # train
 device: cuda:0
 seed: 0
-gradient_steps: 220000
+gradient_steps: 200000
 batch_size: 512
 horizon: 2
-nn: pearce_mlp
+nn: pearce_mlp # or "dit"
+
+available_data_rate: 1.0
 
 diffusion: sde
 solver: ${solvers.${diffusion}}
@@ -35,7 +35,7 @@ extra_sample_steps: 8
 
 # contractivity
 lambda_contr: 0.1
-loss_type: "all" # or "eigen_max" or "eigen_avg" or "all"
+loss_type: "jacobian" # or "eigen_max" or "eigen_avg" or "all"
 
 loss_weights:
   jacobian: 0.0
@@ -43,22 +43,25 @@ loss_weights:
   eigen_avg: 0.0
 
 # optimizer
-lr: 0.001
+lr: ${lrs.${nn}}
+lrs:
+  dit: 5e-4
+  pearce_mlp: 1e-3
 
 # eval
 model_path: path/to/model
 eval_episodes: 10
 num_envs: 5
 eval_freq: 10000
-save_video: true
+save_video: false
 
 # log
-exp_name: ${env_name}_${diffusion}_horizon_${horizon}
+exp_name: ${env_name}_${nn}_${diffusion}
 save_path: logs
 project: contractive_diffuser
-group: dbc_pusht
+group: dbc_robomimic_lowdim
 wandb_mode: online
-log_freq: 500
+log_freq: 1000
 save_freq: 100000
 log_dir: logs
 
