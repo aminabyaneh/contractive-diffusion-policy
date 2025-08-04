@@ -56,7 +56,6 @@ If you get errors related to Mujoco, you can downgrade the version to 3.1.6 as s
 ```bash
 pip install "dm_control<=1.0.20" "mujoco<=3.1.6"
 ```
----
 
 ### 4. Install Robomimic
 
@@ -70,33 +69,65 @@ conda create --name contractive-diffuser-robomimic --clone contractive-diffuser
 
 And now install Robomimic:
 
+```bash
+# Install Robomimic from source (recommended)
+cd <PATH_TO_ROBOMIMIC_INSTALL_DIR>
+git clone https://github.com/ARISE-Initiative/robomimic.git
+cd robomimic
+pip install -e .
 
+# And Robosuite!
+cd <PATH_TO_ROBOSUITE_INSTALL_DIR>
+git clone https://github.com/ARISE-Initiative/robosuite.git
+cd robosuite
+pip install -e .
+```
 
-## Training Pipelines
-
-To run all experiments for all subtasks of a certain benchmark, use [all_exps.bash](all_exps.bash) in the following way.
+## Simple runs
+Running CDP on a selected D4RL task is just as simple as running the [edp_d4rl.py](edp_d4rl.py) file with proper arguments.
 
 ```bash
-chmod +x all_exps.bash
-./all_exps.bash <script> <seeds, default=1>
-
-# e.g., single run of all experiments using edp and kitchen env
-./all_exps.bash pipelines/cd_edp_kitchen.py
+python edp_d4rl.py env_name="kitchen" task="kitchen-complete-v0" loss_type="jacobian" loss_weights.jacobian=1.0
 ```
 
-Choose from the following options for each entry of [all_exps.bash](all_exps.bash).
+And for running CDP in an imitation learning setup on robomimic dataset, try
 
 ```python
-scripts = ["Scripts in pipelines/ directory"]
-seeds = ["Number of random seeds, set to 1 for a single run"]
+python dbc_robomimic.py task="$task" loss_type="jacobian" loss_weights.jacobian=0.1
+
 ```
 
-Detailed instructions and scripts are available in the [pipelines readme](pipelines/README.md) file.
+## All Experiments
+
+To run all experiments for all subtasks of a certain benchmark, use either [il_exps.bash](il_exps.bash) for imitation learning or [offline_rl_exps.bash](offline_rl_exps.bash) in the following way.
+
+```bash
+chmod +x il_exps.bash
+./il_exps.bash <robomimic_environment> <seeds, default=5>
+
+# e.g., single run of all experiments on low-dim robomimic lift, square, transport, and can tasks
+./il_exps.bash robomimic_lowdim 1
+```
+
+```bash
+chmod +x offline_rl_exps.bash
+./offline_rl_exps.bash <d4rl_environment> <seeds, default=5>
+
+# e.g., single run of all experiments on low-dim robomimic lift, square, transport, and can tasks
+./offline_rl_exps.bash robomimic_lowdim 1
+```
 
 ### Background processes
 
 The script launches background jobs for better parallelization.
-To kill these background processes, you can use ```pkill``` or just ```kill```. For instance ```pkill -9 -f kitchen``` for kitchen training processes or ```kill -9 <pid>``` if you have a specific process Id. Check list of processes with ```ps -aux | grep kitchen```.
+To kill these background processes, you can use ```pkill``` or just ```kill```. For instance ```pkill -9 -f kitchen``` for kitchen training processes or ```kill -9 <pid>``` if you have a specific process Id. Check list of processes with ```ps -aux | grep <part_of_env_name>```.
+
+---
+
+## Configuration System
+
+
+TODO
 
 ---
 

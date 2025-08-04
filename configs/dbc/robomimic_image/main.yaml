@@ -95,10 +95,10 @@ lrs:
 
 # eval
 model_path: path/to/model
-eval_episodes: 10
+eval_episodes: 20
 num_envs: 5
 eval_freq: 10000
-save_video: true
+save_video: false
 
 # log
 exp_name: ${env_name}_${nn}_${diffusion}

@@ -1,17 +1,16 @@
 import hydra
 import os
-import sys
 import pdb
 import warnings
 warnings.filterwarnings('ignore')
 
-import gym
 import pathlib
 import time
 import collections
 import numpy as np
 import torch
 import torch.nn as nn
+
 from cleandiffuser.env.robomimic.robomimic_image_wrapper import RobomimicImageWrapper
 from cleandiffuser.env.wrapper import VideoRecordingWrapper, MultiStepWrapper
 from cleandiffuser.env.utils import VideoRecorder
@@ -37,7 +36,7 @@ def make_async_envs(args):
         env = EnvUtils.create_env_from_metadata(
             env_meta=env_meta,
             render=False,
-            render_offscreen=args.save_video,
+            render_offscreen=False,
             use_image_obs=enable_render,
         )
         return env
@@ -185,7 +184,7 @@ def inference(args, envs, dataset, agent, logger):
     return {'mean_step': np.nanmean(episode_steps), 'mean_reward': np.nanmean(episode_rewards), 'mean_success': np.nanmean(episode_success)}
 
 
-@hydra.main(config_path="configs/dbc/robomimic_image", config_name="lift")
+@hydra.main(config_path="configs/dbc/robomimic_image", config_name="main")
 def pipeline(args):
     # --------------------- Create Path -----------------------
     set_seed(args.seed)
