@@ -1,6 +1,6 @@
-# Contractive Diffuser
+# Contractive Diffusion Policies
 
-A contractive reverse diffusion process to improve policies for offline reinforcement learning (RL).
+A contractive reverse diffusion process to improve policies for `offline robot learning through imitation or reinforcement`.
 
 ---
 
@@ -8,7 +8,7 @@ A contractive reverse diffusion process to improve policies for offline reinforc
 
 ### 1. Environment Setup
 
-Create and activate a Conda or Mamba environment:
+Create and activate a Conda environment:
 
 ```bash
 # Create Python 3.9 environment

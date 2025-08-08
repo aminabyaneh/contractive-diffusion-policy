@@ -15,8 +15,8 @@ mkdir -p logs
 # main script logic goes here
 echo "Starting script with argument: $environment, $seeds"
 
-tasks=("lift" "can" "square" "transport")
-jacobian_penalty=(0.0 0.01 0.1 1 10) # 0.0
+tasks=("lift" "can") # ("square" "transport")
+jacobian_penalty=(0.1 1 10) # 0.0
 available_data_rate=(1.0 0.5 0.1) # 0.1 0.05
 gradient_steps=200000
 eval_freq=20000

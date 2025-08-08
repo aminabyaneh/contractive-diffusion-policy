@@ -10,9 +10,6 @@ import torch
 import gym
 import numpy as np
 
-from gym.vector import SyncVectorEnv
-
-
 def eval(env, actor, critic, critic_target, dataset, args, obs_dim, act_dim):
     """
     Synchronous inference using a trained actor and critic.
