@@ -1,0 +1,85 @@
+defaults:
+  - _self_
+  - task: kitchen-mixed-v0
+
+# General
+pipeline_name: cd_edp_d4rl_${env_name}
+device: cuda:0
+
+# Method
+method: edp
+mode: train
+seed: 0
+
+# Environment
+env_name: kitchen
+normalize_reward: True
+discount: 0.99
+
+max_episode_steps: ${max_episode_steps_per_env.${env_name}}
+max_episode_steps_per_env:
+  kitchen: 280
+  mujoco: 1000
+  antmaze: 1000
+
+# Actor
+solver: ${solvers.${env_name}}
+solvers:
+  kitchen: ode_dpmsolver++_2M
+  mujoco: ode_dpmsolver++_2M
+  antmaze: ode_dpmsolver++_2M
+
+predict_noise: False
+diffusion_steps: 50
+sampling_steps: 15
+ema_rate: 0.995
+actor_learning_rate: 0.0003
+diffusion_type: discrete # or continuous
+
+# Critic
+hidden_dim: 256
+critic_learning_rate: 0.0003
+
+# Contraction
+contraction_threshold: 1.0
+lambda_contr: 0.1
+loss_type: "jacobian" # or "eigen_max" or "eigen_avg" or "all"
+
+loss_weights:
+  jacobian: 0.0
+  eigen_max: 0.0
+  eigen_avg: 0.0
+
+num_power_iters: 5
+
+# Wandb
+wandb_mode: offline
+project: fine_tuning
+group: ${method}_${env_name}
+exp_name: cd_edp
+log_dir: logs
+
+# Training
+gradient_steps: 200000
+batch_size: 256
+ema_update_interval: 5
+log_interval: 1000
+save_interval: 50000
+eval_interval: 20000
+
+# Inference
+ckpt: latest
+num_envs: 10
+num_episodes: 5
+num_candidates: 100
+temperature: 0.5
+use_ema: True
+
+# hydra
+hydra:
+  job:
+    chdir: false
+  run:
+    dir: ${log_dir}/${pipeline_name}/${task.env_name}/${seed}
+  output_subdir: null
+
