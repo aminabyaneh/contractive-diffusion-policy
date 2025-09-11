@@ -1,8 +1,8 @@
 [project]
-name = "contractive-diffusion-policy"
+name = "contractive-diffusion-policies"
 dynamic = ["version"]
-description = "Improving actuib diffusion for offline learning with contractive reverse diffusion processes."
-authors = [{ name = "CDP authors" }]
+description = "Contractive diffusion policies improve offline robot policy learning for continuous control tasks."
+authors = [{ name = "Contractive Diffusion Policy authors" }]
 readme = "README.md"
 requires-python = ">= 3.8"
 keywords = ["reinforcement learning", "pytorch", "diffusion models"]

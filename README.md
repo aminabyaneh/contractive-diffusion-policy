@@ -43,15 +43,15 @@ Create and activate a Conda environment:
 
 ```bash
 # Create Python 3.9 environment
-conda create -n contractive-diffuser python=3.9
+conda create -n cdp python=3.9
 
 # Activate the environment
-conda activate contractive-diffuser
+conda activate cdp
 ```
 
 ### 2. Install Clean Diffuser
 
-This project relies on the [Clean Diffuser](https://github.com/CleanDiffuserTeam/CleanDiffuser) implementation for diffusion policies.
+This project relies on the [Clean Diffuser](https://github.com/CleanDiffuserTeam/CleanDiffuser) implementation for diffusion and conditioning architectures.
 
 ```bash
 # (Optional) Create a directory for libraries
@@ -70,7 +70,7 @@ pip install -e .
 We use [D4RL](https://github.com/Farama-Foundation/D4RL) offline datasets for experiments.
 
 ```bash
-# Install Mujoco-py dependencies
+# Install Mujoco-py dependencies, remove libgl1-mesa-glx for Ubuntu 24.04
 sudo apt-get install libosmesa6-dev libgl1-mesa-glx libglfw3 libglew-dev patchelf
 
 # Navigate to the libs directory if not already there
@@ -91,8 +91,6 @@ pip install "dm_control<=1.0.20" "mujoco<=3.1.6"
 ### 4. Install Robomimic
 
 Note: There exists an incompatiblity between MuJoCu for Robosuite and D4RL. Easiest fix for now is by cloning the previous conda environment or downgrading the dm_control package.
-
-We prefer the first way as it's simpler and costs only a bit of disk space.
 
 ```bash
 conda create --name contractive-diffuser-robomimic --clone contractive-diffuser
