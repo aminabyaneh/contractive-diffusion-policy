@@ -1,6 +1,37 @@
-# Contractive Diffusion Policies
+# Contractive Diffusion Policies (CDP)
 
-A contractive reverse diffusion process to improve policies for `offline robot learning through imitation or reinforcement`.
+Implementation of contractive reverse diffusion process to improve policies for `offline policy learning`. CDP aims to improve diffusion policy's sample efficiency and general performance by enforcing contraction constraints on the learned policy through Jacobian/eigenvalue regularization.
+
+---
+## Overview
+
+Diffusion policies are widely-used generative models in robot learning often formulated by SDE. However, the same SDE modeling that provides diffusion policies with the flexibility to learn diverse behavior suffers from discretization and integration errors, requires large datasets for precise score matching, and experiences inconsistencies in action generation.
+
+We propose SDE by promoting contraction in the reverse diffusion process to mitigate solver errors, and to reduces unwanted action variance during the sampling process.
+
+
+`CDP can be implemented by minimal modifications to ANY diffusion policy framework.`
+
+```python
+# Assuming a defined diffusion backbone during training
+from cleandiffuser.nn_diffusion import ChiUNet1d
+nn_diffusion: ChiUNet1d
+
+# Calculate the score jacobian
+# Our theory shows this is enough for enforcing contraction throughout the reverse diffusion process
+score_jacobian = jacobian(nn_diffusion, action)
+
+# Find the largest eigenvalue of the symmetric part
+largest_eigenval = approx_largest_eigenval(sym(score_jacobian))
+
+# Penalize and add it to the loss (simplistic version)
+contraction_loss = ctr_coeff * relu((largest_eigenval + ctr_th) ** 2)
+total_loss = diffusion_loss + contraction_loss
+```
+
+### Benefits of contractive sampling process
+![CDP Concept](media/cdp_concept.png)
+![CDP Steps](media/cdp_training.png)
 
 ---
 
@@ -121,19 +152,6 @@ chmod +x offline_rl_exps.bash
 
 The script launches background jobs for better parallelization.
 To kill these background processes, you can use ```pkill``` or just ```kill```. For instance ```pkill -9 -f kitchen``` for kitchen training processes or ```kill -9 <pid>``` if you have a specific process Id. Check list of processes with ```ps -aux | grep <part_of_env_name>```.
-
----
-
-## Configuration System
-
-
-TODO
-
----
-
-## Evaluation
-
-See the configs for reproducible results.
 
 ---
 
