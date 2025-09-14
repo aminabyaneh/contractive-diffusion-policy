@@ -66,13 +66,23 @@ def pipeline(args):
 
     # dataset handler
     if args.env_name == "antmaze":
-        dataset = D4RLAntmazeTDDataset(d4rl.qlearning_dataset(env))
+        full_dataset = D4RLAntmazeTDDataset(d4rl.qlearning_dataset(env))
     elif args.env_name == "kitchen":
-        dataset = D4RLKitchenTDDataset(d4rl.qlearning_dataset(env))
+        full_dataset = D4RLKitchenTDDataset(d4rl.qlearning_dataset(env))
     elif args.env_name == "mujoco":
-        dataset = D4RLMuJoCoTDDataset(d4rl.qlearning_dataset(env), args.normalize_reward)
+        full_dataset = D4RLMuJoCoTDDataset(d4rl.qlearning_dataset(env), args.normalize_reward)
     else:
         raise ValueError(f"Unknown environment: {args.env_name}")
+
+    # use only a portion of the dataset
+    data_portion = getattr(args, 'data_portion', 1.0)  # Default to full dataset if not specified
+    if data_portion < 1.0:
+        total_size = len(full_dataset)
+        subset_size = int(total_size * data_portion)
+        indices = torch.randperm(total_size)[:subset_size]
+        dataset = torch.utils.data.Subset(full_dataset, indices)
+    else:
+        dataset = full_dataset
 
     dataloader = DataLoader(dataset, batch_size=args.batch_size, shuffle=True,
                             num_workers=4, pin_memory=True, drop_last=True,

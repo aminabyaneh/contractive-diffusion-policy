@@ -3,11 +3,11 @@ defaults:
   - task: kitchen-mixed-v0
 
 # General
-pipeline_name: cd_edp_d4rl_${env_name}
+pipeline_name: cd_cdp_d4rl_${env_name}
 device: cuda:0
 
 # Method
-method: edp
+method: cdp
 mode: train
 seed: 0
 

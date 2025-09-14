@@ -14,7 +14,7 @@ from cleandiffuser.utils import (
 from cleandiffuser.diffusion.basic import DiffusionModel
 from cleandiffuser.diffusion.diffusionsde import epstheta_to_xtheta, xtheta_to_epstheta
 
-from src.contraction_loss import compute_contractive_loss
+from source.contraction_loss import compute_contractive_loss
 
 SUPPORTED_SOLVERS = ["ode_dpmsolver_1", "ode_dpmsolver++_1", "ode_dpmsolver++_2M"]
 

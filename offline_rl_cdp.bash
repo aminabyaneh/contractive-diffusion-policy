@@ -53,45 +53,49 @@ else
 fi
 
 # configuration
-loss_weights=(0.0 0.001) # loss coefficients to sweep over
+cdp_loss_weights=(0.0 0.001) # loss coefficients to sweep over
+data_portions=(1.0 0.5 0.2 0.1) # portions of the dataset to use
 gradient_steps=500000
 eval_interval=50000
 wandb_mode="offline"
 loss_type="jacobian"
 
 # run experiments with nested loops
-for penalty in "${loss_weights[@]}"; do
+for penalty in "${cdp_loss_weights[@]}"; do
   echo "Starting experiments with loss weight: $penalty"
 
   for task in "${tasks[@]}"; do
     echo "  Running task: $task"
 
-    # generate random seeds and run experiments
-    for seed in $(shuf -i 0-9999 -n "$seeds"); do
-      exp_name="jrun_${seed}_${task}_${penalty}"
-      log_file="logs/${exp_name}.log"
+    for data_portion in "${data_portions[@]}"; do
+      echo "    Using data portion: $data_portion"
 
-      echo "    Launching seed $seed (log: $log_file)"
+      # generate random seeds and run experiments
+      for seed in $(shuf -i 0-9999 -n "$seeds"); do
+        exp_name="jrun_${seed}_${task}_${penalty}"
+        log_file="logs/${exp_name}.log"
 
-      python scripts/cdp_rl.py \
-        env_name="$env" \
-        task="$task" \
-        loss_type="$loss_type" \
-        exp_name="$exp_name" \
-        seed="$seed" \
-        project="contractive_diffuser" \
-        gradient_steps="$gradient_steps" \
-        eval_interval="$eval_interval" \
-        wandb_mode="$wandb_mode" \
-        loss_weights.jacobian="$penalty" \
-        > "$log_file" 2>&1 &
-    done
+        echo "    Launching seed $seed (log: $log_file)"
 
+        python scripts/cdp_rl.py \
+          env_name="$env" \
+          task="$task" \
+          loss_type="$loss_type" \
+          exp_name="$exp_name" \
+          seed="$seed" \
+          project="contractive_diffuser" \
+          gradient_steps="$gradient_steps" \
+          eval_interval="$eval_interval" \
+          wandb_mode="$wandb_mode" \
+          data_portion="$data_portion" \
+          loss_weights.jacobian="$penalty" \
+          > "$log_file" 2>&1 &
+      done
     # wait for all tasks of current penalty/task combination to complete
     wait
     echo "  Completed all seeds for task: $task"
+    done
   done
-
   echo "Completed all tasks for jacobian penalty: $penalty"
 done
 
