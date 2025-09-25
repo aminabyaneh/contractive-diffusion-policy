@@ -19,7 +19,7 @@ loss_type="jacobian"
 gradient_steps=100000
 eval_freq=20000
 project="il_cdp"
-diffusion_network="pearce_mlp"
+diffusion_network="chi_transformer"
 
 # main execution loop
 for jp in "${jacobian_penalty[@]}"; do
@@ -30,7 +30,7 @@ for jp in "${jacobian_penalty[@]}"; do
 
         # determine script based on environment
         if [[ "$environment" == "robomimic_lowdim" ]]; then
-          python scripts/cdp_il_lowdim.py \
+          python baselines/dp.py \
             task="$task" \
             loss_type="$loss_type" \
             exp_name="jrun_${i}_${task}_${jp}_${adr}" \
@@ -44,7 +44,7 @@ for jp in "${jacobian_penalty[@]}"; do
             > "logs/jrun_${i}_${task}_${jp}_${adr}.log" 2>&1 &
 
         elif [[ "$environment" == "robomimic_image" ]]; then
-          python scripts/cdp_il_image.py \
+          python baselines/dp.py \
             task="$task" \
             loss_type="$loss_type" \
             exp_name="jrun_${i}_${task}_${jp}_${adr}" \

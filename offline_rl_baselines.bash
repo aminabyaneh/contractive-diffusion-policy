@@ -1,13 +1,15 @@
 #!/usr/bin/env bash
 
 # description: Run batched experiments with a given script and number of seeds.
-# usage: ./all_exps.bash <script> <seeds>
+# usage: ./offline_rl_benchmarks.bash [environment] [seeds]
+# example: ./offline_rl_benchmarks.bash kitchen 5
 
 set -euo pipefail
 
 # params
 environment="${1:-"kitchen"}"
-seeds="${2:-4}"
+seeds="${2:-1}"
+method="${3:-"dql"}"
 
 # create logs directory if it doesn't exist
 mkdir -p logs
@@ -78,7 +80,8 @@ for penalty in "${cdp_loss_weights[@]}"; do
 
         echo "    Launching seed $seed (log: $log_file)"
 
-        python scripts/cdp_rl.py \
+        if [[ "$method" == "dql" ]]; then
+          python baselines/dql.py \
           env_name="$env" \
           task="$task" \
           loss_type="$loss_type" \
@@ -91,6 +94,22 @@ for penalty in "${cdp_loss_weights[@]}"; do
           data_portion="$data_portion" \
           loss_weights.jacobian="$penalty" \
           > "$log_file" 2>&1 &
+
+        elif [[ "$method" == "idql" ]]; then
+          python baselines/idql.py \
+            env_name="$env" \
+            task="$task" \
+            loss_type="$loss_type" \
+            exp_name="$exp_name" \
+            seed="$seed" \
+            project="$wandb_project" \
+            gradient_steps="$gradient_steps" \
+            eval_interval="$eval_interval" \
+            wandb_mode="$wandb_mode" \
+            data_portion="$data_portion" \
+            loss_weights.jacobian="$penalty" \
+            > "$log_file" 2>&1 &
+        done
       done
     # wait for all tasks of current penalty/task combination to complete
     wait
@@ -101,3 +120,4 @@ for penalty in "${cdp_loss_weights[@]}"; do
 done
 
 echo "Script finished."
+

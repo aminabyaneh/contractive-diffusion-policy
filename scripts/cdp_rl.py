@@ -14,8 +14,8 @@ with open(os.devnull, 'w') as devnull, \
 
 import gym
 import hydra
-import numpy as np
 import torch
+import numpy as np
 import torch.nn.functional as F
 
 from torch.optim.lr_scheduler import CosineAnnealingLR
@@ -39,7 +39,7 @@ from source.sim_eval import eval
 from source.utils import Logger, set_seed
 
 
-@hydra.main(config_path="../configs/edp", config_name="main", version_base=None)
+@hydra.main(config_path="../configs/cdp-rl", config_name="main", version_base=None)
 def pipeline(args):
     """
     Main pipeline for training and evaluating contractive EDP on D4RL datasets.
@@ -51,6 +51,7 @@ def pipeline(args):
     Raises:
         ValueError: Unknown config or training mode.
     """
+
     # ---------------------- Configurations ----------------------
     set_seed(args.seed)
 
@@ -88,7 +89,7 @@ def pipeline(args):
                             num_workers=4, pin_memory=True, drop_last=True,
                             persistent_workers=True)
 
-    obs_dim, act_dim = dataset.o_dim, dataset.a_dim
+    obs_dim, act_dim = full_dataset.o_dim, full_dataset.a_dim
 
     print(f"\n================================ Dataset report ==================================")
     print(f"env_name: {args.task.env_name}")
@@ -124,7 +125,6 @@ def pipeline(args):
             device=args.device)
     else:
         raise ValueError(f"Unknown diffusion type: {args.diffusion_type}")
-
 
     # ---------------------- Critic ------------------------
     critic = DQLCritic(obs_dim, act_dim, hidden_dim=args.hidden_dim).to(args.device)
@@ -289,7 +289,7 @@ def pipeline(args):
             # evaluation
             eval_time = time.time()
             if (n_gradient_step + 1) % args.eval_interval == 0:
-                eval_log = eval(env, actor, critic, critic_target, dataset, args, obs_dim, act_dim)
+                eval_log = eval(env, actor, critic, critic_target, full_dataset, args, obs_dim, act_dim)
                 eval_time = (time.time() - eval_time)
                 eval_log["step"] = n_gradient_step + 1
                 logger.log(eval_log, category='eval')

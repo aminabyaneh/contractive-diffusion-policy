@@ -187,7 +187,7 @@ def inference(args, envs, dataset, agent, logger):
     return {'mean_step': np.nanmean(episode_steps), 'mean_reward': np.nanmean(episode_rewards), 'mean_success': np.nanmean(episode_success)}
 
 
-@hydra.main(config_path="../configs/dbc/robomimic_image", config_name="main")
+@hydra.main(config_path="configs/cdp-il/robomimic_image", config_name="main")
 def pipeline(args):
     # --------------------- Create Path -----------------------
     set_seed(args.seed)
