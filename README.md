@@ -1,8 +1,17 @@
 # Contractive Diffusion Policies (CDPs)
+[![arXiv](https://img.shields.io/badge/arXiv-2301.01234-b31b1b?style=for-the-badge&logo=arxiv&logoColor=white)](https://arxiv.org/abs/2301.01234) [![ICLR OpenReview](https://img.shields.io/badge/ICLR'2026-Paper-blue?style=for-the-badge&logo=openaccess&logoColor=white)](https://openreview.net/forum?id=XXXXXXX) [![Website](https://img.shields.io/badge/Website-CDP-4CAF50?style=for-the-badge&logo=google-chrome&logoColor=white)](https://contractive-diffusion.github.io/)
+
+
+
 
 Implementation of contractive diffusion sampling process to improve policies for `offline policy learning`.
 
 CDP aims to `improve diffusion policy's sample efficiency and general performance` by enforcing contraction constraints on the learned policy through Jacobian/eigenvalue regularization.
+
+> CDP is accepted at `ICLR 2026!`
+
+
+
 
 ---
 ## Overview
@@ -11,10 +20,10 @@ Diffusion policies are widely-used generative models in robot learning that can 
 
 However, the same score-based modeling that provides diffusion policies with the flexibility to learn diverse behavior suffers from discretization and integration errors, requires large datasets for precise score matching, and experiences inconsistencies in action generation.
 
-We propose CDP by promoting contraction in the reverse diffusion process to mitigate solver errors, and to reduces unwanted action variance during the sampling process.
+We propose CDP which promotes contraction in the reverse diffusion process to mitigate solver errors, and to reduces unwanted action variance during the sampling process.
 
 ### Example implementation
-`CDP can be implemented by minimal modifications to ANY diffusion policy framework`, since our contribution targets the core diffusion sampling process.
+Since our methodology targets the core of the diffusion sampling process, CDP can be `implemented by minimal modifications to ANY diffusion policy framework`.
 
 ```python
 # Assuming a defined diffusion backbone during training
@@ -182,6 +191,18 @@ We welcome contributions that improve our work! Please open an issue or submit a
 
 ---
 
-## Authors
 
-Anonymous authors.
+## Citation
+
+If you find this work useful, please consider citing:
+
+```bibtex
+@misc{abyaneh2026contractivediffusionpoliciesrobust,
+  title={Contractive Diffusion Policies: Robust Action Diffusion via Contractive Score-Based Sampling with Differential Equations},
+  author={Amin Abyaneh and Charlotte Morissette and Mohamad H. Danesh and Anas El Houssaini and David Meger and Gregory Dudek and Hsiu-Chin Lin},
+  year={2026},
+  eprint={2601.01003},
+  archivePrefix={arXiv},
+  primaryClass={cs.LG},
+  url={https://arxiv.org/abs/2601.01003},
+}
