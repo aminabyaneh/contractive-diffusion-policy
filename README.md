@@ -31,13 +31,13 @@ from cleandiffuser.nn_diffusion import DiT
 nn_diffusion: DiT # TODO: Define charachteristics, such as embedding, hidden blocks, etc.
 
 # Calculate the score jacobian
-# Our theory (Theorem ) shows this is enough for enforcing contraction throughout the reverse diffusion process
+# Our theory shows this is enough for enforcing contraction throughout the reverse diffusion process
 score_jacobian = jacobian(nn_diffusion, action)
 
 # Find the largest eigenvalue of the symmetric part
 largest_eigenval = approx_largest_eigenval(sym(score_jacobian))
 
-# Penalize and add it to the loss (simplistic version)
+# Penalize and add it to the loss (simplest version)
 contraction_loss = ctr_coeff * relu((largest_eigenval + ctr_th) ** 2)
 total_loss = diffusion_loss + contraction_loss
 ```
@@ -197,12 +197,12 @@ We welcome contributions that improve our work! Please open an issue or submit a
 If you find this work useful, please consider citing:
 
 ```bibtex
-@misc{abyaneh2026contractivediffusionpoliciesrobust,
-  title={Contractive Diffusion Policies: Robust Action Diffusion via Contractive Score-Based Sampling with Differential Equations},
-  author={Amin Abyaneh and Charlotte Morissette and Mohamad H. Danesh and Anas El Houssaini and David Meger and Gregory Dudek and Hsiu-Chin Lin},
-  year={2026},
-  eprint={2601.01003},
-  archivePrefix={arXiv},
-  primaryClass={cs.LG},
-  url={https://arxiv.org/abs/2601.01003},
+@inproceedings{
+abyaneh2026contractive,
+title={Contractive Diffusion Policies: Robust Action Diffusion via Contractive Score-Based Sampling with Differential Equations},
+author={Amin Abyaneh and Charlotte Morissette and Mohamad H. Danesh and Anas Houssaini and David Meger and Gregory Dudek and Hsiu-Chin Lin},
+booktitle={The Fourteenth International Conference on Learning Representations},
+year={2026},
+url={https://openreview.net/forum?id=iKJbmx1iuQ}
 }
+```
